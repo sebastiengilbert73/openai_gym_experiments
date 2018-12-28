@@ -10,33 +10,39 @@ import sys
 
 
 """
->>> cartPoleEnv = gym.make('CartPole-v0')
->>> print (cartPoleEnv.action_space)
-Discrete(2)
->>> print (cartPoleEnv.observation_space)
-Box(4,)
+>>> mountainCarEnv = gym.make('MountainCar-v0')
+>>> print (mountainCarEnv.action_space)
+Discrete(3)
+>>> print (mountainCarEnv.observation_space)
+Box(2,)
+
+>>> print (mountainCarEnv.observation_space.high)
+[0.6  0.07]
+>>> print (mountainCarEnv.observation_space.low)
+[-1.2  -0.07]
 
 """
 
 class NeuralNet(torch.nn.Module):
-    def __init__(self, hiddenLayerWidths=(8,8,4)):
+    def __init__(self, hiddenLayerWidths=(8,5)):
         super(NeuralNet, self).__init__()
         layersDict = OrderedDict()
         for hiddenLayerNdx in range(len(hiddenLayerWidths) + 1):
             if hiddenLayerNdx == 0:
-                numberOfInputs = 4
+                numberOfInputs = 2
             else:
                 numberOfInputs = hiddenLayerWidths[hiddenLayerNdx - 1]
 
             if hiddenLayerNdx == len(hiddenLayerWidths):
-                numberOfOutputs = 2
+                numberOfOutputs = 3
             else:
                 numberOfOutputs = hiddenLayerWidths[hiddenLayerNdx]
             layersDict['layer' + str(hiddenLayerNdx)] = self.FullyConnectedLayer(numberOfInputs, numberOfOutputs)
             #print ("__init__(): layer = {}".format(layersDict['layer' + str(hiddenLayerNdx)]))
         self.layers = torch.nn.Sequential(layersDict)
         self.apply(init_weights)
-
+        self.observation_high = [0.6, 0.07]
+        self.observation_low = [-1.2, -0.07]
 
     def forward(self, inputs):
         dataState = inputs
@@ -54,7 +60,7 @@ class NeuralNet(torch.nn.Module):
 
     def act(self, observation, reward, done):
         #print ("act(): observation = {}".format(observation))
-        inputTensor = torch.Tensor(observation)
+        inputTensor = torch.Tensor(self.RescaleObservation(observation))
         #print ("act(): inputTensor = {}".format(inputTensor))
         outputTensor = self.forward(inputTensor)
         #print ("act(): outputTensor = {}".format(outputTensor))
@@ -66,13 +72,8 @@ class NeuralNet(torch.nn.Module):
         if layerNdx < 0 or layerNdx >= len(self.layers):
             raise ValueError("NNController.py PerturbateWeights(): The layer index ({}) is out of the range [0, {}]".format(layerNdx, len(self.layers) - 1))
         weightsShape = self.layers[layerNdx][0].weight.shape
-        #print ("PerturbateWeights(): weightsShape = {}".format(weightsShape))
         biasShape = self.layers[layerNdx][0].bias.shape
-        #print ("PerturbateWeights(): biasShape = {}".format(biasShape))
 
-        #print ("PerturbateWeights(): Before, self.layers[layerNdx][0].weight = \n{}".format(self.layers[layerNdx][0].weight))
-        #print ("PerturbateWeights(): Before, self.layers[layerNdx][0].bias = \n{}".format(
-        #    self.layers[layerNdx][0].bias))
         weightsDelta = torch.randn(weightsShape) * weightsDeltaSigma
         biasDelta = torch.randn(biasShape) * biasDeltaSigma
 
@@ -82,10 +83,6 @@ class NeuralNet(torch.nn.Module):
         self.layers[layerNdx][0].bias = torch.nn.Parameter(
             self.layers[layerNdx][0].bias + biasDelta
         )
-        #print ("PerturbateWeights(): After, self.layers[layerNdx][0].weight = \n{}".format(
-        #    self.layers[layerNdx][0].weight))
-        #print ("PerturbateWeights(): After, self.layers[layerNdx][0].bias = \n{}".format(
-        #    self.layers[layerNdx][0].bias))
 
     def PerturbateAllWeights(self, weightsDeltaSigma, biasDeltaSigma):
         for layerNdx in range(len(self.layers)):
@@ -97,43 +94,49 @@ class NeuralNet(torch.nn.Module):
     def Load(self, filepath):
         self.load_state_dict(torch.load(filepath, map_location=lambda storage, location: storage))
 
+    def RescaleObservation(self, observation):
+        return [ (observation[0] - self.observation_low[0])/(self.observation_high[0] - self.observation_low[0]), \
+                 (observation[1] - self.observation_low[1]) / (self.observation_high[1] - self.observation_low[1]) ]
+
+
 def init_weights(m):
         if type(m) == torch.nn.Linear:
             torch.nn.init.constant_(m.weight, 0)
             m.bias.data.fill_(0)
 
+
 def TournamentStatistics(tournamentAverageRewards):
     if len(tournamentAverageRewards) == 0:
         raise ValueError("TournamentStatistics(): The input list is empty")
-    highestReward = -1
+    highestReward = -sys.float_info.max
     rewardsSum = 0
     for reward in tournamentAverageRewards:
         if reward > highestReward:
             highestReward = reward
         rewardsSum += reward
-    return rewardsSum/len(tournamentAverageRewards), highestReward
+    return rewardsSum / len(tournamentAverageRewards), highestReward
 
 
 def main():
-    print ('NNController.py main()')
+    print ("MountainCar-v0/NNController.py main()")
     parser = argparse.ArgumentParser()
     parser.add_argument('OutputDirectory', help='The directory where the outputs will be written')
-    parser.add_argument('--testController', help='The filepath of a neural network to test. Default: None', default=None)
+    parser.add_argument('--testController', help='The filepath of a neural network to test. Default: None',
+                        default=None)
     args = parser.parse_args()
-
-    agent = NeuralNet((8,4))
+    hiddenLayerWidthsList = (8, 5)
+    agent = NeuralNet(hiddenLayerWidthsList)
 
     if args.testController is not None:
-        env = gym.make('CartPole-v0')
+        env = gym.make('MountainCar-v0')
         agent.Load(args.testController)
         rewardSumsList = []
-        for i_episode in range(20):
+        for i_episode in range(100):
             observation = env.reset()
             rewardSum = 0
-            #for t in range(100):
             done = False
             while not done:
-                env.render()
+                #env.render()
                 print (observation)
                 reward = 0
                 done = False
@@ -146,24 +149,29 @@ def main():
                     break
             rewardSumsList.append(rewardSum)
         print ("main(): rewardSumsList: {}".format(rewardSumsList))
+        averageReward, highestReward = TournamentStatistics(rewardSumsList)
+        print ("main(): averageReward = {}; highestReward = {}".format(averageReward, highestReward))
         sys.exit()
 
-    inputs = torch.Tensor([-0.1, 2.4, 0.7, -1.2])
+    """agent.PerturbateAllWeights(0.1, 0.1)
+    inputs = torch.Tensor([-0.1, 2.4])
     outputs = agent(inputs)
-    print ("main(): outputs = {}".format(outputs))
+    reward = 0
+    done = False
+    action = agent.act(inputs, reward, done)
+    print ("main(): outputs = {}; action = {}".format(outputs, action))
+    """
 
-    #agent.PerturbateWeights(0, 0.1, 0.1)
-
-    env = gym.make('CartPole-v0')
-    episode_count = 100
+    env = gym.make('MountainCar-v0')
+    episode_count = 30
     reward = 0
     done = False
 
-    numberOfPerturbations = 5
-    weigtsDeltaSigma = 0.3
-    biasDeltaSigma = 0.1
+    numberOfPerturbations = 15
+    weigtsDeltaSigma = 1.0
+    biasDeltaSigma = 1.0
 
-    highestReward = -1
+    highestReward = -sys.float_info.max
     currentChampion = copy.deepcopy(agent)
     numberOfTournaments = 100
 
@@ -186,7 +194,7 @@ def main():
                 done = False
                 while not done:
                     action = perturbedAgent.act(observation, reward, done) # Choose an action
-                    observation, reward, done, _ = env.step(action) # Perform the action
+                    observation, reward, done, info = env.step(action) # Perform the action
                     rewardSum += reward
                     if done:
                         #print ("main() breaking! episodeSum = {}".format(episodeSum))
@@ -204,6 +212,8 @@ def main():
             if agentAverageEpisodeReward > highestReward:
                 highestReward = agentAverageEpisodeReward
                 currentChampion = copy.deepcopy(perturbedAgent)
+                currentChampion.Save(os.path.join(args.OutputDirectory, \
+                    'champion_' + str(hiddenLayerWidthsList) + '_' + str(highestReward)))
 
         tournamentAverageReward, tournamentHighestReward = TournamentStatistics(tournamentAverageRewards)
         print ("highestReward = {}; tournamentAverageReward = {}; tournamentHighestReward = {}".format(highestReward, tournamentAverageReward, tournamentHighestReward))
@@ -212,7 +222,7 @@ def main():
                 str(tournamentHighestReward) + ',' + str(highestReward) + '\n')
 
     # Save the champion
-    currentChampion.Save(os.path.join(args.OutputDirectory, 'champion_8_4_' + str(highestReward)))
+    #currentChampion.Save(os.path.join(args.OutputDirectory, 'champion_' + str(hiddenLayerWidthsList) + '_' + str(highestReward)))
 
     # Show the behaviour of the champion
     observation = env.reset()
@@ -231,6 +241,7 @@ def main():
 
     # Close the env and write monitor result info to disk
     env.close
+
 
 
 if __name__ == '__main__':
