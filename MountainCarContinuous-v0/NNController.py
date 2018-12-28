@@ -63,7 +63,7 @@ class NeuralNet(torch.nn.Module):
     def act(self, observation, reward, done):
         inputTensor = torch.Tensor(self.RescaleObservation(observation))
         outputTensor = self.forward(inputTensor)
-        return outputTensor.item()
+        return [outputTensor.item()] # Requires a list
 
 
     def PerturbateWeights(self, layerNdx, weightsDeltaSigma, biasDeltaSigma):
@@ -138,7 +138,7 @@ def main():
                 print (observation)
                 reward = 0
                 done = False
-                action = [agent.act(observation, reward, done)]
+                action = agent.act(observation, reward, done)
                 #action = env.action_space.sample()
                 observation, reward, done, info = env.step(action)
                 rewardSum += reward
@@ -192,7 +192,7 @@ def main():
                 rewardSum = 0
                 done = False
                 while not done:
-                    action = [perturbedAgent.act(observation, reward, done)] # Choose an action
+                    action = perturbedAgent.act(observation, reward, done) # Choose an action
                     #print ("action = {}".format(action))
                     observation, reward, done, info = env.step(action) # Perform the action
                     rewardSum += reward
