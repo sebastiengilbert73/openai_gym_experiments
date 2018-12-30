@@ -223,10 +223,11 @@ def main():
         print ("averageReward = {}\t; stdDevReward = {}\t, maxReward = {}".format(averageReward, stdDevReward, maxReward))
         if maxReward > highestReward:
             highestReward = maxReward
-            """champion = copy.deepcopy(populationChampion)
+            populationChampion = PopulationChampion(individualToRewardDic)
+            champion = copy.deepcopy(populationChampion)
             champion.Save(os.path.join(args.OutputDirectory, \
                                               'champion_' + str(hiddenLayerWidthsList) + '_' + str(highestReward)))
-            """
+
         with open(os.path.join(args.OutputDirectory, 'stats.csv'), "a+") as statsFile:
             statsFile.write(str(cycleNdx + 1) + ',' + str(averageReward) + ',' + str(stdDevReward) + ',' + str(maxReward) + ',' + str(highestReward) + '\n')
 
@@ -289,7 +290,8 @@ def PopulationStatistics(individualToRewardDic):
     return average, stdDev, maxReward
 
 def PopulationChampion(individualToRewardDic):
-    pass
+    sortedPairsList = sorted(individualToRewardDic.items(), key=lambda kv: kv[1])
+    return sortedPairsList[-1][0]
 
 if __name__ == '__main__':
     main()
