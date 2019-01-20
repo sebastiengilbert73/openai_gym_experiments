@@ -25,14 +25,15 @@ def main():
     solver = QLearning.Solver(numberOfObservations=(32 * 11 * 2),
                               numberOfActions=2,
                               gamma=0.99,
-                              learningRate=0.3,
-                              environment=blackjackEnv
+                              learningRate=0.01,
+                              environment=blackjackEnv,
+                              defaultValue=0.01
                               )
-    solver.Solve(100000, writeToConsole=True)
+    solver.Solve(10000, writeToConsole=True)
 
     # Test it a large number of times
     rewardSum = 0
-    numberOfEpisodes = 10000
+    numberOfEpisodes = 100000
     for episodeNdx in range(numberOfEpisodes):
         observation = blackjackEnv.Reset()
         done = False
