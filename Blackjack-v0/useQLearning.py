@@ -35,10 +35,11 @@ def main():
     solver = QLearning.Solver(numberOfObservations=(32 * 11 * 2),
                               numberOfActions=2,
                               gamma=1.0,
-                              learningRate=0.01,
+                              learningRate=0.1,
                               environment=blackjackEnv,
                               defaultValue=0.01,
                               epsilonRampDownNumberOfEpisodes = 10000,
+                              epsilonFinalValue=0.1
                               )
     solver.Solve(100000, writeToConsole=True)
 
